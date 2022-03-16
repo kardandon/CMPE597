@@ -1,0 +1,5 @@
+1- Test transformations one by one that are not included by PIRL
+2- Test the combinations of transformations
+3- Deciding the best combination
+4- Testing mobile networks with that combination
+5- Results and reporting
