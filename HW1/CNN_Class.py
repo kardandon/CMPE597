@@ -1,10 +1,12 @@
 import numpy as np
-
+EPS = 0
 class Network_Model:
     def __init__(self, loss, optimizer):
         self.layers = []
         self.loss = loss
         self.optimizer = optimizer
+        if loss == cross_entropy:
+            self.dloss = dcross_entropy
         
     def add(self, layer):
         self.layers.append(layer)
@@ -12,76 +14,143 @@ class Network_Model:
     def forward(self, data):
         for layer in self.layers:
             data = layer.forward(data)
-        return softmax(data)
+        return data
     
     def backward(self, grad, lr):
         for layer in reversed(self.layers):
             grad = layer.backward(grad, lr)
-            print(grad)
+            
     
-    def train(self, train_set, test_set, epochs, lr, verbose):
+    def train_set(self, train_set, test_set, epochs, lr, verbose):
         history = {'loss': [], 'val_loss': [], 'accuracy': [], 'val_accuracy': []}
-        label_count = len(np.unique(test_set.targets))
+        try:
+            label_count = len(np.unique(test_set.targets))
+        except:
+            label_count = len(np.unique(test_set[1]))
         for epoch in range(epochs):
+            loss, tp = 0,0
             if verbose:
                 print("\n ==> Epoch {}".format(epoch))
-            loss, tp = 0,0
-            for i in range(len(train_set)):
-                x, y = train_set[i]
-                output = self.forward(np.asarray(x))
-                loss += self.loss(self.layers, output[y])
                 
+            
+            for i in range(len(train_set)):
+                if verbose and i % 10 == 9:
+                    print("accuracy: {} loss: {} iter:{} ".format(tp/i, loss/i, i), end="\r")
+                x, y = train_set[i]
+                output = self.forward(np.array(x))
+                loss += self.loss(y, output)
                 if np.argmax(output) == y:
                     tp += 1
-                grad = np.zeros(label_count)
-                grad[y] = -1 / output[y] + np.sum([2 * np.sum(np.absolute(layer.get_weights())) for layer in self.layers])
-                
-                lr = self.optimizer(lr, grad)
-                
+                grad = self.dloss(y, output)
+
+                lr = self.optimizer(lr, i)
+
                 self.backward(grad, lr)
             history["accuracy"].append(tp/len(train_set) * 100)
             history["loss"].append(loss / len(train_set))
             val_loss, val_accuracy = self.eval(test_set)
             history["val_loss"].append(val_loss)
             history["val_accuracy"].append(val_accuracy)
-        if verbose:
-            print("Train Loss: %02.3f" % (history["loss"][-1]))
-            print("Train Accuracy: %02.3f" % (history["accuracy"][-1]))
-            print("Validation Loss: %02.3f" % (history["val_loss"][-1]))
-            print("Validation Accuracy: %02.3f" % (history["val_accuracy"][-1]))
+            if verbose:
+                print("loss: {} accuracy: {} val_loss: {} val_accuracy: {} ".format(history["loss"][-1], history["accuracy"][-1], history["val_loss"][-1], history["val_accuracy"][-1]))
+                
+    def train(self, X_train, Y_train, X_test, Y_test, epochs, lr, verbose):
+        history = {'loss': [], 'val_loss': [], 'accuracy': [], 'val_accuracy': []}
+        label_count = len(np.unique(Y_train))
+        
+        for epoch in range(epochs):
+            loss, tp = 0,0
+            if verbose:
+                print("\n ==> Epoch {}".format(epoch))
+                
+            
+            for i in range(len(Y_train)):
+                if verbose and i % 10 == 9:
+                    print("accuracy: {} loss: {} iter:{} ".format(tp/i, loss/i, i), end="\r")
+                x = X_train[i]
+                y = Y_train[i]
+                output = self.forward(np.array(x))
+                loss += self.loss(y, output)
+                if np.argmax(output) == y:
+                    tp += 1
+                grad = self.dloss(y, output)
+
+                lr = self.optimizer(lr, i)
+
+                self.backward(grad, lr)
+            history["accuracy"].append(tp/len(Y_train) * 100)
+            history["loss"].append(loss / len(Y_train))
+            val_loss, val_accuracy = self.eval(X_test, Y_test)
+            history["val_loss"].append(val_loss)
+            history["val_accuracy"].append(val_accuracy)
+            if verbose:
+                print("loss: {} accuracy: {} val_loss: {} val_accuracy: {} ".format(history["loss"][-1], history["accuracy"][-1], history["val_loss"][-1], history["val_accuracy"][-1]))
     
-    def eval(self, test_set):
+    def eval_set(self, test_set):
         loss, tp = 0, 0
         for i in range(len(test_set)):
-            output = self.forward(test_set[i][0])
+            output = self.forward(np.asarray(test_set[i][0]))
             
-            loss += self.loss(self.layers, output[test_set[i][1]])
+            loss += self.loss([test_set[i][1]], output)
             
             if np.argmax(output) == test_set[i][1]:
                 tp += 1
             
         return loss / len(test_set), (tp / len(test_set)) * 100
+    
+    def eval(self, X_test, Y_test):
+        loss, tp = 0, 0
+        for i in range(len(Y_test)):
+            output = self.forward(np.asarray(X_test[i]))
             
+            loss += self.loss(Y_test[i], output)
+            
+            if np.argmax(output) == Y_test[i]:
+                tp += 1
+            
+        return loss / len(Y_test), (tp / len(Y_test)) * 100
+    
+    def predict(self,X_test):
+        pred_label = np.zeros(len(X_test))
+        for i in range(len(X_test)):
+            output = self.forward(X_test[i])
+            pred_label[i] = np.nanargmax(output)
+        return pred_label
+    
+def lr_scheduler(learning_rate, iteration):
+    if iteration % 100 == 99:
+        return learning_rate * 0.9
+    else:
+        return learning_rate
+    
 def ReLU(x):
-    return max(x, 0)
+    return np.max(x, 0)
         
+def dReLU(x):
+    return 1 if x > 0 else 0
+
 def softmax(x):
-    return np.exp(x) / np.sum(np.exp(x), axis=0)
+    #e_x = np.exp(x - np.max(x))
+    #return e_x / e_x.sum(axis=0)
+    return (np.exp(x) / np.sum(np.exp(x), axis=0))
 
-def cross_entropy(x):
-    return -np.log(x)
+def dsoftmax(x):
+    soft = softmax(x)
+    return soft * (1-soft)
 
-def default_optimizer(lr, grad):
+def default_optimizer(lr, iteration):
     return lr
 
-def cross_entropy(layers, x):
-    loss = -np.log(x)
-    for layer in layers:
-        loss += np.linalg.norm(layer.get_weights()) ** 2
-    return loss
+def cross_entropy(y, y_pred):
+    loss = -np.log(y_pred[y] + EPS)
+    return loss#/float(y_pred.shape[0])
 
-def softmax(x):
-    return np.exp(x) / np.sum(np.exp(x), axis=0)
+def dcross_entropy(y, y_pred):
+    #dloss = np.zeros(y_pred.shape)
+    #dloss[y] = - 1/ (y_pred[y] + EPS)
+    #return dloss#/float(y_pred.shape[0]))
+    y_pred[y] -= 1
+    return y_pred
 
 class Conv2D_Layer:
     def __init__(self, channels=8, stride=1, kernel_size=3, activation="relu"):
@@ -92,6 +161,7 @@ class Conv2D_Layer:
         self.filters = np.random.randn(channels, kernel_size, kernel_size) * 0.1
         self.last_shape = None
         self.last_input = None
+        self.last_output = None
     
     def forward(self, data):
         self.last_shape = data.shape
@@ -100,17 +170,22 @@ class Conv2D_Layer:
         output_size = int((input_size - self.kernel_size) / self.stride) + 1
         
         out = np.zeros((self.channels, output_size, output_size))
-        
         for i in range(self.channels):
             for j in range(0, input_size - self.kernel_size + 1, self.stride):
                 for k in range(0, input_size - self.kernel_size + 1, self.stride):
                     temp = data[:, j:j+self.kernel_size, k:k + self.kernel_size]
                     out[i, int(j/self.stride), int(k/self.stride)] += np.sum(self.filters[i] * temp)
+        self.last_output = out
         if self.activation == "relu":
             out = np.vectorize(ReLU)(out)
         return out
     
     def backward(self, grad, lr):
+        last_output = self.last_output
+        if self.activation == "relu":
+            last_output = np.vectorize(dReLU)(last_output)
+            
+        grad = last_output * grad
         input_size = self.last_shape[1]
             
         lossgrad_input = np.zeros(self.last_shape)
@@ -120,9 +195,8 @@ class Conv2D_Layer:
             for j in range(0, input_size - self.kernel_size + 1, self.stride):
                 for k in range(0, input_size - self.kernel_size + 1, self.stride):
                     temp = self.last_input[:, j:j+self.kernel_size, k:k + self.kernel_size]
-                    lossgrad_filter[i] = np.sum(grad[i, int(j/self.stride), int(k/self.stride)] * temp, axis=0)
+                    lossgrad_filter[i] += np.sum(grad[i, int(j/self.stride), int(k/self.stride)] * temp, axis=0)
                     lossgrad_input[:, j:j+self.kernel_size, k:k+self.kernel_size] += grad[i, int(j/self.stride), int(k/self.stride)] * self.filters[i]
-        
         self.filters -= lossgrad_filter * lr
         return lossgrad_input
     
@@ -142,11 +216,10 @@ class MaxPooling2D_Layer:
         out = np.zeros((c, h - self.size, w - self.size))
         
         for i in range(c):
-            for j in range(h - self.size + 1):
-                for k in range(w - self.size + 1):
+            for j in range(h - self.size):
+                for k in range(w - self.size):
                     temp = data[i, j:j+self.size, k:k + self.size]
-                    out[i, j:j+self.size, k:k+self.size] = np.max(temp)
-        
+                    out[i, j, k] = np.max(temp)
         return out
     
     def backward(self, grad, lr):
@@ -154,10 +227,10 @@ class MaxPooling2D_Layer:
         out = np.zeros(self.last_shape)
         for i in range(c):
             for j in range(h - self.size):
-                for k in range(h - self.size):
+                for k in range(w - self.size):
                     temp = self.last_input[i, j:j+self.size, k:k + self.size]
                     (x, y) = np.unravel_index(np.nanargmax(temp), temp.shape)
-                    out[i, j:j+x, k:k+y] += grad[i, j, k]
+                    out[i, j+x, k+y] += grad[i, j, k]
         
         return out
     
@@ -173,32 +246,58 @@ class FC_Layer:
         self.activation = activation
         self.last_shape = None
         self.last_input = None
+        self.last_output = None
         
     def forward(self, data):
         self.last_shape = data.shape
         
         data = data.flatten()
         out = np.dot(data, self.weights) + self.biases
+        
         if self.activation == "relu":
             out = np.vectorize(ReLU)(out)
-            
+        
+        self.last_output = out 
         self.last_input = data
         return out
     
     def backward(self, grad, lr):
+        last_out = self.last_output
+        if self.activation == "relu":
+            last_out = np.vectorize(dReLU)(last_out)
+            grad = last_out * grad
         
-        self.last_input = np.expand_dims(self.last_input, axis=1)
-        grad = np.expand_dims(grad, axis=1)
-        
-        grad_weights = np.dot(self.last_input, np.transpose(grad))
-        grad_biases = np.sum(grad, axis=1).reshape(self.biases.shape)
-        
+        grad_weights = np.dot(self.last_input[np.newaxis].transpose(), grad[np.newaxis])
+        grad_biases = grad
+        out = np.dot(self.weights, grad).reshape(self.last_shape)
         self.weights -= grad_weights * lr
         self.biases -= grad_biases * lr
         
-        out = np.dot(self.weights, grad).reshape(self.last_shape)
         return out
     
     def get_weights(self):
         return np.reshape(self.weights, -1)
-        
+
+class Softmax_Layer:
+    def __init__(self):
+        self.last_input = None
+    
+    def forward(self, data):
+        self.last_input = data
+        return softmax(data)
+    
+    def backward(self, grad, lr):
+        """
+        temp = np.exp(self.last_input)
+        for i, g in enumerate(grad):
+            if g == 0: continue
+            S = np.sum(temp)
+            out = -temp[i] * temp / (S ** 2)
+            out[i] = temp[i] * (S - temp[i]) / (S ** 2)
+            grad = g * out
+            
+            return grad.reshape(self.last_input.shape)
+        """
+        return grad * dsoftmax(self.last_input)
+    def get_weights(self):
+        return 0
