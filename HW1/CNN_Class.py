@@ -115,7 +115,7 @@ class Network_Model:
             
             if np.argmax(output) == Y_test[i]:
                 tp += 1
-            
+            print("{} of {} accuracy: {}".format(i+1,len(Y_test), tp/(i+1)), end="\r")
         return loss / len(Y_test), (tp / len(Y_test)) * 100
     
     # return predicted labels
@@ -195,12 +195,17 @@ def conv2d_back(filters, grad, channels, stride, kernel_size, input_size, last_s
     return lossgrad_input, lossgrad_filter
                 
 class Conv2D_Layer:
-    def __init__(self, channels=8, stride=1, kernel_size=3, activation="relu"):
+    def __init__(self, channels=8, stride=1, kernel_size=3, activation="relu", name="Conv2D", filters=None):
+        self.name = name
         self.channels = channels
         self.stride = stride
         self.kernel_size = kernel_size
         self.activation = activation
-        self.filters = np.random.randn(channels, kernel_size, kernel_size) * 0.1
+        try:
+            if filters == None:
+                self.filters = np.random.randn(channels, kernel_size, kernel_size) * 0.1
+        except:
+            self.filters = filters
         self.last_shape = None
         self.last_input = None
         self.last_output = None
@@ -230,10 +235,11 @@ class Conv2D_Layer:
         return lossgrad_input
     
     def get_weights(self):
-        return np.reshape(self.filters, -1)
+        return self.filters, None
     
 class MaxPooling2D_Layer:
-    def __init__(self, size=2):
+    def __init__(self, size=2, name="Maxpool"):
+        self.name = name
         self.size = size
         self.stride = size
         self.last_shape = None
@@ -271,14 +277,23 @@ class MaxPooling2D_Layer:
         return out
     
     def get_weights(self):
-        return 0
+        return None, None
     
 class FC_Layer:
-    def __init__(self, innode, outnode, activation=None):
+    def __init__(self, innode, outnode, activation=None, name="FC", weights=None, biases=None):
+        self.name = name
         self.innode = innode
         self.outnode = outnode
-        self.biases = np.zeros(outnode)
-        self.weights = np.random.randn(innode, outnode) * 0.1
+        try:
+            if biases == None:
+                self.biases = np.zeros(outnode)
+        except:
+            self.biases = biases
+        try:
+            if weights == None:
+                self.weights = np.random.randn(innode, outnode) * 0.1
+        except:
+            self.weights = weights
         self.activation = activation
         self.last_shape = None
         self.last_input = None
@@ -312,10 +327,11 @@ class FC_Layer:
         return out
     
     def get_weights(self):
-        return np.reshape(self.weights, -1)
+        return self.weights, self.biases
 
 class Softmax_Layer:
-    def __init__(self):
+    def __init__(self, name="softmax"):
+        self.name = name
         self.last_input = None
     
     def forward(self, data):
@@ -325,4 +341,4 @@ class Softmax_Layer:
     def backward(self, grad, lr):
         return grad * dsoftmax(self.last_input)
     def get_weights(self):
-        return 0
+        return None, None
