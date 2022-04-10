@@ -1,10 +1,11 @@
 import numpy as np
+import numba
 EPS = 0
 class Network_Model:
-    def __init__(self, loss, optimizer):
+    def __init__(self, loss, lr_scheduler):
         self.layers = []
         self.loss = loss
-        self.optimizer = optimizer
+        self.lr_scheduler = lr_scheduler
         if loss == cross_entropy:
             self.dloss = dcross_entropy
         
@@ -43,7 +44,7 @@ class Network_Model:
                     tp += 1
                 grad = self.dloss(y, output)
 
-                lr = self.optimizer(lr, i)
+                lr = self.lr_scheduler(lr, i)
 
                 self.backward(grad, lr)
             history["accuracy"].append(tp/len(train_set) * 100)
@@ -75,7 +76,7 @@ class Network_Model:
                     tp += 1
                 grad = self.dloss(y, output)
 
-                lr = self.optimizer(lr, i)
+                lr = self.lr_scheduler(lr, i)
 
                 self.backward(grad, lr)
             history["accuracy"].append(tp/len(Y_train) * 100)
@@ -130,15 +131,17 @@ def dReLU(x):
     return 1 if x > 0 else 0
 
 def softmax(x):
-    #e_x = np.exp(x - np.max(x))
-    #return e_x / e_x.sum(axis=0)
-    return (np.exp(x) / np.sum(np.exp(x), axis=0))
+    out = (np.exp(x) / np.sum(np.exp(x), axis=0))
+    if np.isnan(out).any():
+        e_x = np.exp(x - np.max(x))
+        return e_x / e_x.sum(axis=0)
+    return out
 
 def dsoftmax(x):
     soft = softmax(x)
     return soft * (1-soft)
 
-def default_optimizer(lr, iteration):
+def default_lr(lr, iteration):
     return lr
 
 def cross_entropy(y, y_pred):
@@ -152,6 +155,32 @@ def dcross_entropy(y, y_pred):
     y_pred[y] -= 1
     return y_pred
 
+@numba.njit(parallel=True)
+def conv2d(filters, data, channels, stride, kernel_size, input_size):
+    output_size = int((input_size - kernel_size) / stride) + 1
+    out = np.zeros((channels, output_size, output_size))
+    for i in numba.prange(channels):
+        for j in range(0, input_size - kernel_size + 1, stride):
+            for k in range(0, input_size - kernel_size + 1, stride):
+                for l in numba.prange(data.shape[0]):
+                    temp = data[l, j:j + kernel_size, k:k + kernel_size]
+                    out[i, int(j/stride), int(k/stride)] += np.sum(filters[i,:,:] * temp)
+    return out
+
+@numba.njit(parallel=True)
+def conv2d_back(filters, grad, channels, stride, kernel_size, input_size, last_shape, last_input):
+    lossgrad_input = np.zeros(last_shape)
+    lossgrad_filter = np.zeros(filters.shape)
+
+    for i in numba.prange(channels):
+        for j in range(0, input_size - kernel_size + 1, stride):
+            for k in range(0, input_size - kernel_size + 1, stride):
+                for l in numba.prange(last_input.shape[0]):
+                    temp = last_input[l, j:j+kernel_size, k:k + kernel_size]
+                    lossgrad_filter[i, :, :] += grad[i, int(j/stride), int(k/stride)] * temp
+                    lossgrad_input[l, j:j+kernel_size, k:k+kernel_size] += grad[i, int(j/stride), int(k/stride)] * filters[i, :, :]
+    return lossgrad_input, lossgrad_filter
+                
 class Conv2D_Layer:
     def __init__(self, channels=8, stride=1, kernel_size=3, activation="relu"):
         self.channels = channels
@@ -167,36 +196,21 @@ class Conv2D_Layer:
         self.last_shape = data.shape
         self.last_input = data
         input_size = data.shape[1]
-        output_size = int((input_size - self.kernel_size) / self.stride) + 1
-        
-        out = np.zeros((self.channels, output_size, output_size))
-        for i in range(self.channels):
-            for j in range(0, input_size - self.kernel_size + 1, self.stride):
-                for k in range(0, input_size - self.kernel_size + 1, self.stride):
-                    temp = data[:, j:j+self.kernel_size, k:k + self.kernel_size]
-                    out[i, int(j/self.stride), int(k/self.stride)] += np.sum(self.filters[i] * temp)
+       
+        out = conv2d(self.filters, data, self.channels, self.stride, self.kernel_size, input_size)
         self.last_output = out
         if self.activation == "relu":
             out = np.vectorize(ReLU)(out)
         return out
     
     def backward(self, grad, lr):
-        last_output = self.last_output
-        if self.activation == "relu":
-            last_output = np.vectorize(dReLU)(last_output)
-            
-        grad = last_output * grad
-        input_size = self.last_shape[1]
-            
-        lossgrad_input = np.zeros(self.last_shape)
-        lossgrad_filter = np.zeros(self.filters.shape)
+        if self.activation == "relu": 
+            last_output = np.vectorize(dReLU)(self.last_output)
+            grad = last_output * grad
         
-        for i in range(self.channels):
-            for j in range(0, input_size - self.kernel_size + 1, self.stride):
-                for k in range(0, input_size - self.kernel_size + 1, self.stride):
-                    temp = self.last_input[:, j:j+self.kernel_size, k:k + self.kernel_size]
-                    lossgrad_filter[i] += np.sum(grad[i, int(j/self.stride), int(k/self.stride)] * temp, axis=0)
-                    lossgrad_input[:, j:j+self.kernel_size, k:k+self.kernel_size] += grad[i, int(j/self.stride), int(k/self.stride)] * self.filters[i]
+        input_size = self.last_shape[1]
+        
+        lossgrad_input, lossgrad_filter = conv2d_back(self.filters, grad, self.channels, self.stride, self.kernel_size, input_size, self.last_shape, self.last_input)
         self.filters -= lossgrad_filter * lr
         return lossgrad_input
     
@@ -206,6 +220,7 @@ class Conv2D_Layer:
 class MaxPooling2D_Layer:
     def __init__(self, size=2):
         self.size = size
+        self.stride = size
         self.last_shape = None
         self.last_input = None
         
@@ -213,24 +228,29 @@ class MaxPooling2D_Layer:
         self.last_shape = data.shape
         c, h, w = data.shape
         self.last_input = data
-        out = np.zeros((c, h - self.size, w - self.size))
+        output_size = int((h - self.size) / self.stride) + 1
+        out = np.zeros((c, output_size, output_size))
         
         for i in range(c):
-            for j in range(h - self.size):
-                for k in range(w - self.size):
+            for j in range(0, h - self.size + 1, self.stride):
+                for k in range(0, w - self.size + 1, self.stride):
+                    xx = int(j / self.stride)
+                    yy = int(k / self.stride)
                     temp = data[i, j:j+self.size, k:k + self.size]
-                    out[i, j, k] = np.max(temp)
+                    out[i, xx, yy] = np.max(temp)
         return out
     
     def backward(self, grad, lr):
         c, h, w = self.last_shape
         out = np.zeros(self.last_shape)
         for i in range(c):
-            for j in range(h - self.size):
-                for k in range(w - self.size):
+            for j in range(0, h - self.size + 1, self.stride):
+                for k in range(0, w - self.size + 1, self.stride):
+                    xx = int(j / self.stride)
+                    yy = int(k / self.stride)
                     temp = self.last_input[i, j:j+self.size, k:k + self.size]
                     (x, y) = np.unravel_index(np.nanargmax(temp), temp.shape)
-                    out[i, j+x, k+y] += grad[i, j, k]
+                    out[i, j+x, k+y] += grad[i, xx, yy]
         
         return out
     
