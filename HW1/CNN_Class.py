@@ -1,6 +1,10 @@
+# İzzet Emre Küçükkaya
+# 2017401123
+# CMPE597 HW1
 import numpy as np
 import numba
 EPS = 0
+# Network Class
 class Network_Model:
     def __init__(self, loss, lr_scheduler):
         self.layers = []
@@ -21,7 +25,7 @@ class Network_Model:
         for layer in reversed(self.layers):
             grad = layer.backward(grad, lr)
             
-    
+    #Train using dataloader 
     def train_set(self, train_set, test_set, epochs, lr, verbose):
         history = {'loss': [], 'val_loss': [], 'accuracy': [], 'val_accuracy': []}
         try:
@@ -55,6 +59,7 @@ class Network_Model:
             if verbose:
                 print("loss: {} accuracy: {} val_loss: {} val_accuracy: {} ".format(history["loss"][-1], history["accuracy"][-1], history["val_loss"][-1], history["val_accuracy"][-1]))
                 
+    # Train using seperate numpy arrays
     def train(self, X_train, Y_train, X_test, Y_test, epochs, lr, verbose):
         history = {'loss': [], 'val_loss': [], 'accuracy': [], 'val_accuracy': []}
         label_count = len(np.unique(Y_train))
@@ -64,7 +69,7 @@ class Network_Model:
             if verbose:
                 print("\n ==> Epoch {}".format(epoch))
                 
-            
+            # calculate loss and backpropagate
             for i in range(len(Y_train)):
                 if verbose and i % 10 == 9:
                     print("accuracy: {} loss: {} iter:{} ".format(tp/i, loss/i, i), end="\r")
@@ -87,6 +92,7 @@ class Network_Model:
             if verbose:
                 print("loss: {} accuracy: {} val_loss: {} val_accuracy: {} ".format(history["loss"][-1], history["accuracy"][-1], history["val_loss"][-1], history["val_accuracy"][-1]))
     
+    # Eval using dataloader
     def eval_set(self, test_set):
         loss, tp = 0, 0
         for i in range(len(test_set)):
@@ -99,6 +105,7 @@ class Network_Model:
             
         return loss / len(test_set), (tp / len(test_set)) * 100
     
+    # Eval using nump arrays
     def eval(self, X_test, Y_test):
         loss, tp = 0, 0
         for i in range(len(Y_test)):
@@ -111,16 +118,18 @@ class Network_Model:
             
         return loss / len(Y_test), (tp / len(Y_test)) * 100
     
+    # return predicted labels
     def predict(self,X_test):
         pred_label = np.zeros(len(X_test))
         for i in range(len(X_test)):
             output = self.forward(X_test[i])
             pred_label[i] = np.nanargmax(output)
         return pred_label
-    
+     
+# loss explodes sometimes thus i decreased lr as iteration increases
 def lr_scheduler(learning_rate, iteration):
-    if iteration % 100 == 99:
-        return learning_rate * 0.9
+    if (iteration + 1) % 10000 == 0:
+        return learning_rate * 0.1
     else:
         return learning_rate
     
@@ -130,7 +139,8 @@ def ReLU(x):
 def dReLU(x):
     return 1 if x > 0 else 0
 
-def softmax(x):
+def softmax(x): 
+    # exp overloads when it is large thus I used stable softmax when it happens
     out = (np.exp(x) / np.sum(np.exp(x), axis=0))
     if np.isnan(out).any():
         e_x = np.exp(x - np.max(x))
@@ -155,10 +165,12 @@ def dcross_entropy(y, y_pred):
     y_pred[y] -= 1
     return y_pred
 
+# parallelizing the convolutions
 @numba.njit(parallel=True)
 def conv2d(filters, data, channels, stride, kernel_size, input_size):
     output_size = int((input_size - kernel_size) / stride) + 1
     out = np.zeros((channels, output_size, output_size))
+    # basic convolution
     for i in numba.prange(channels):
         for j in range(0, input_size - kernel_size + 1, stride):
             for k in range(0, input_size - kernel_size + 1, stride):
@@ -167,11 +179,12 @@ def conv2d(filters, data, channels, stride, kernel_size, input_size):
                     out[i, int(j/stride), int(k/stride)] += np.sum(filters[i,:,:] * temp)
     return out
 
+# parallelizing the convolutions
 @numba.njit(parallel=True)
 def conv2d_back(filters, grad, channels, stride, kernel_size, input_size, last_shape, last_input):
     lossgrad_input = np.zeros(last_shape)
     lossgrad_filter = np.zeros(filters.shape)
-
+    # backpropagation explained in report
     for i in numba.prange(channels):
         for j in range(0, input_size - kernel_size + 1, stride):
             for k in range(0, input_size - kernel_size + 1, stride):
@@ -199,6 +212,7 @@ class Conv2D_Layer:
        
         out = conv2d(self.filters, data, self.channels, self.stride, self.kernel_size, input_size)
         self.last_output = out
+        # activation function
         if self.activation == "relu":
             out = np.vectorize(ReLU)(out)
         return out
@@ -211,6 +225,7 @@ class Conv2D_Layer:
         input_size = self.last_shape[1]
         
         lossgrad_input, lossgrad_filter = conv2d_back(self.filters, grad, self.channels, self.stride, self.kernel_size, input_size, self.last_shape, self.last_input)
+        #update weights
         self.filters -= lossgrad_filter * lr
         return lossgrad_input
     
@@ -230,7 +245,7 @@ class MaxPooling2D_Layer:
         self.last_input = data
         output_size = int((h - self.size) / self.stride) + 1
         out = np.zeros((c, output_size, output_size))
-        
+        # max pooling
         for i in range(c):
             for j in range(0, h - self.size + 1, self.stride):
                 for k in range(0, w - self.size + 1, self.stride):
@@ -243,6 +258,7 @@ class MaxPooling2D_Layer:
     def backward(self, grad, lr):
         c, h, w = self.last_shape
         out = np.zeros(self.last_shape)
+        # putting gradient where was max
         for i in range(c):
             for j in range(0, h - self.size + 1, self.stride):
                 for k in range(0, w - self.size + 1, self.stride):
@@ -270,7 +286,7 @@ class FC_Layer:
         
     def forward(self, data):
         self.last_shape = data.shape
-        
+        #flatten to make operations
         data = data.flatten()
         out = np.dot(data, self.weights) + self.biases
         
@@ -286,7 +302,7 @@ class FC_Layer:
         if self.activation == "relu":
             last_out = np.vectorize(dReLU)(last_out)
             grad = last_out * grad
-        
+        # Update weights
         grad_weights = np.dot(self.last_input[np.newaxis].transpose(), grad[np.newaxis])
         grad_biases = grad
         out = np.dot(self.weights, grad).reshape(self.last_shape)
@@ -307,17 +323,6 @@ class Softmax_Layer:
         return softmax(data)
     
     def backward(self, grad, lr):
-        """
-        temp = np.exp(self.last_input)
-        for i, g in enumerate(grad):
-            if g == 0: continue
-            S = np.sum(temp)
-            out = -temp[i] * temp / (S ** 2)
-            out[i] = temp[i] * (S - temp[i]) / (S ** 2)
-            grad = g * out
-            
-            return grad.reshape(self.last_input.shape)
-        """
         return grad * dsoftmax(self.last_input)
     def get_weights(self):
         return 0
