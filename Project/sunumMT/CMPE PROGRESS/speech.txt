@@ -1,0 +1,120 @@
+Slayt 1:
+
+Hello everyone, my name is berkcan üstün and my partner is
+İzzet emre küçükkaya. Today we will present our progress
+on the term project which is Mobile-PIRL.
+
+Slayt 2:
+
+Outline of the presentation goes like this. I will talk about
+the brief description of the project, Pretext Invariant
+Representation Learning. Then my partner will talk about
+Mobile networks, what we have done so far and the future work.
+
+Slayt 3:
+
+This project is in the domain of self supervised learning.
+Supervised learning techniques of the Deep Neural
+Networks are in need of the large amount of semantically 
+annotated data in order to perform efficiently. However, it
+is a compelling situation to obtain a great quantity of semantically
+
+annotated data. The Self-Supervised learning techniques are
+introduced to overcome this obstacle. On the other hand, plenty
+of these techniques uses convolutional neural networks that have
+a great deal of complexity, parameters and inference time. In
+terms of performance, the recent mobile networks are considered
+
+to be comparable to complex network architectures despite their
+simple structure, few number parameters and less inference time.
+By this sense, the usage of newly introduced mobile networks
+in the domain of self supervised learning is an interesting
+topic of research. Regarding these facts, the performance of
+
+the mobile networks in a self supervised learning architecture
+can be examined. Our choice as the baseline architecture is
+PIRL (Pretext-Invariant Representation Learning). In addition,
+the number of transformations used in the PIRL can be increased
+along with the opportunity that they can be combined together
+
+Slayt 4:
+
+In the most of the self supervised techniques the pretext tasks
+are used. In computer vision, pretext tasks are tasks that are 
+designed so that a network trained to solve them will learn visual 
+features that can be easily adapted to other downstream tasks.
+
+A Downstream is a task that typically has real world applications 
+and human annotated data.There are many different kinds of pretext tasks.
+The simplest ones typically involve augmentation of the input data and then
+training a network to learn what augmentation has been applied, examples include
+
+rotation, color removal, and more. This way we can generate both the input and the 
+solution to the chosen task, automatically. In the pearl, authors used jigsaw
+transformation.
+
+Slayt 5:
+
+We talked about the pretext tasks and said that and the simple one is the predict
+what augmentation has been done and this is the main idea of basic pretext learning.
+On the other hand, PIRL proposes a new idea that learning representations which
+is invariant to the transformation is a better idea than predicting the what 
+transformation has been applied
+
+Slayt 6:
+
+PIRL uses resnet50 as the backbone architecture which will be replaced by us with
+mobile networks. Both of the original image and the transformed image goes into the
+resnet and the bunch of layers afterwards as we can be seen in the figure. Then we
+expect that f of VIs and g of VIs are similar. Therefore a memory bank is defined which is
+
+the moving average of f of VIs among epochs. The similarity is checked comparing the 
+representations with that moving average values. Now i will leave the stage to my partner.
+
+Slayt 7:
+
+Thank you Berkcan. The second component of the project besides the PIRL are the Mobile
+Networks or so-called lightweight cnns. As we mentioned in the beginning, the real life
+applications have some requirements that a deep network should meet. For example, in an
+augmented reality glasses, the memory capacity and the speed is an issue. That issues 
+
+are related with the number of parameters and the inference time of the deep networks
+that is used for the computer vision tasks of the glasses. The lightweight cnns are
+introduced based on this facts. They have small number of parameters and small inference
+time. And they are comparable to the other deep networks despite their simple structure 
+
+with less number of weights. And you can see an example from the efficientnet paper,
+the efficientnet surpasses the other networks with approximately 5 and 2 and 
+a half times less parameters.
+
+Slayt 8:
+
+We have searched for the PIRL implementations because there was no reference to the code in 
+the original paper, so we needed to find an implementation. After that, we had to decide that 
+which dataset we will be working on. We decided to use STL10 dataset which is used in 
+self-supervised, unsupervised applications. It has one hundred thousand unlabelled images 
+
+and 5000 labeled image to fine tune. We decided to use google colab in order to get the
+advantage of the GPUs. We conducted a literature search on the mobile networks and decide
+which ones we are gonna use; efficientnet_b0, mobilenet_v3_small, mnasnet_A1 and shufflenet_v2.
+They all are builted in the Torchvision and available to use. We modified the PIRL implementation
+
+removed the resnet50 and entegrated the mobile networks and eventually started to the experiments.
+
+Slayt 9:
+We were trying to pretrain the networks for 100 epochs. But in training, our connection has been lost
+therefore the training is crashed for many times for efficient net, mobilenet v3 and resnet50. On the github page
+of the implementation we are using, it is stated that after 100 epochs resnet's val accuracy reaches
+67%. We were saving the weights at every 10 epochs. Therefore, we used 50 epochs saves to compare the results. 
+
+For 50 epochs accuracy the results can be seen on the table. In spite of the fact that mobile net has fewer parameters
+in 50 epochs, accuracy of mobilenet is higher than resnet50 for this case. We are continuing to train networks
+meanwhile, we expect them to be in the progress report
+
+Slayt 10:
+
+We will continue to conduct the experiments with the other mobile networks. In addition, we will try
+different image augmentations and combination of those.
+
+
+    
