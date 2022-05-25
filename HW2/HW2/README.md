@@ -6,6 +6,7 @@ to generate hand written digits
 ## How To use
 - Install requirements\
 pip install requirements.txt
+- Get Data folder in current folder or change the FOLDER in notebooks to desired folder
 - Run the notebook of the desired model\
 GAN, VAE
 - If using GAN change loss to "BCE" or "Wasserstein" to get the desired model
